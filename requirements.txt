@@ -1,0 +1,7 @@
+pandas==2.2.2
+matplotlib==3.9.1.post1
+matplotlib-inline==0.1.7
+pyyaml
+numpy<2.0
+scikit-learn
+lightfm
