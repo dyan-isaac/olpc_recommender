@@ -92,17 +92,22 @@ def run_experiment2(train_interactions, train_weights, test_interactions, user_f
 
     for e in epoch_values:
         for lr in learning_rates:
-            model = LightFM(loss='warp', learning_rate=lr, random_state=42)
+            model = LightFM(loss='warp',learning_rate=lr, learning_schedule='adadelta', random_state=42, user_alpha=0.01, item_alpha=0.01)
             model.fit(train_interactions,sample_weight=train_weights, user_features=user_features, epochs=e, num_threads=4)
 
-            prec = precision_at_k(model, test_interactions, user_features=user_features, k=5).mean()
-            au = auc_score(model, test_interactions, user_features=user_features).mean()
+            train_prec = precision_at_k(model, train_interactions, user_features=user_features, k=5).mean()
+            train_au = auc_score(model, train_interactions, user_features=user_features).mean()
+
+            test_prec = precision_at_k(model, test_interactions, user_features=user_features, k=5).mean()
+            test_au = auc_score(model, test_interactions, user_features=user_features).mean()
 
             results.append({
                 'epochs': e,
                 'learning_rate': lr,
-                'precision': prec,
-                'auc': au
+                'test_prec': test_prec,
+                'test_auc': test_au,
+                'train_prec': train_prec,
+                'train_auc': train_au
             })
 
     # Plot & Save: Precision@5
@@ -122,7 +127,7 @@ def run_experiment2(train_interactions, train_weights, test_interactions, user_f
         # Sort by epochs so lines go in ascending order
         vals_sorted = sorted(vals, key=lambda x: x['epochs'])
         x = [v['epochs'] for v in vals_sorted]
-        y = [v['precision'] for v in vals_sorted]
+        y = [v['test_prec'] for v in vals_sorted]
         plt.plot(x, y, marker='o', label=f"LR={lr}")
 
     plt.title("Experiment #2 With user features: Precision@5 vs Epochs")
@@ -141,7 +146,7 @@ def run_experiment2(train_interactions, train_weights, test_interactions, user_f
     for lr, vals in lr_dict.items():
         vals_sorted = sorted(vals, key=lambda x: x['epochs'])
         x = [v['epochs'] for v in vals_sorted]
-        y = [v['auc'] for v in vals_sorted]
+        y = [v['test_auc'] for v in vals_sorted]
         plt.plot(x, y, marker='o', label=f"LR={lr}")
 
     plt.title("Experiment #2 With user features: AUC vs Epochs")

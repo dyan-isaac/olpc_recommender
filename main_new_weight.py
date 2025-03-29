@@ -5,6 +5,7 @@ from lightfm.cross_validation import random_train_test_split
 from lightfm.data import Dataset
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 
+from AppRecommender import AppRecommender
 from experiments.experiment1 import run_experiment1
 from experiments.experiment2 import run_experiment2
 from experiments.experiment3 import run_experiment3
@@ -197,47 +198,82 @@ def build_dataset():
         key = '_'.join(config)
         item_feature_configs[key] = feature_matrix
 
-    return dataset, interactions, weights, user_features, item_feature_configs
+    return dataset, interactions, weights, user_features, item_feature_configs, interaction_df
 
 def run_all_experiments():
     # build_dataset, do random_train_test_split, etc.
-    dataset, interactions, weights, user_features, item_feature_configs = build_dataset()
+    dataset, interactions, weights, user_features, item_feature_configs, interactions_df = build_dataset()
     train_interactions, test_interactions = random_train_test_split(interactions, test_percentage=0.2, random_state=np.random.RandomState(3))
     train_weights, test_weights = random_train_test_split(weights, test_percentage=0.2, random_state=np.random.RandomState(3))
 
-    print("\n=== Running Experiment 1 ===")
-    exp1_results = run_experiment1(train_interactions, train_weights, test_interactions)
-    print("-------------------------------------------------------------")
-    print(f"{'Epochs':>6} | {'LR':>5} | {'Precision@5':>12} | {'AUC':>6}")
-    print("-------------------------------------------------------------")
+    # print("\n=== Running Experiment 1 ===")
+    # exp1_results = run_experiment1(train_interactions, train_weights, test_interactions)
+    # print("-----------------------------------------------------------------------------------------------")
+    # print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
+    # print("-----------------------------------------------------------------------------------------------")
+    #
+    # for res in exp1_results:
+    #     print(f"{res['epochs']:>6} | "
+    #           f"{res['learning_rate']:>5} | "
+    #           f"{res['train_prec']:.4f}{'':>4} | "
+    #           f"{res['test_prec']:.4f}{'':>4} | "
+    #           f"{res['train_auc']:.4f}{'':>4} | "
+    #           f"{res['test_auc']:.4f}{'':>4}")
+    #
+    # print("\n=== Running Experiment 2 ===")
+    # exp2_results = run_experiment2(train_interactions, train_weights, test_interactions, user_features)
+    # print("-----------------------------------------------------------------------------------------------")
+    # print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
+    # print("-----------------------------------------------------------------------------------------------")
+    #
+    # for res in exp2_results:
+    #     print(f"{res['epochs']:>6} | "
+    #           f"{res['learning_rate']:>5} | "
+    #           f"{res['train_prec']:.4f}{'':>4} | "
+    #           f"{res['test_prec']:.4f}{'':>4} | "
+    #           f"{res['train_auc']:.4f}{'':>4} | "
+    #           f"{res['test_auc']:.4f}{'':>4}")
+    #
+    # for config_key, item_features in item_feature_configs.items():
+    #     print(f"\n=== Running Experiment 3 ({config_key}) ===")
+    #     results = run_experiment3(train_interactions, train_weights, test_interactions, user_features, item_features)
+    #     print("-----------------------------------------------------------------------------------------------")
+    #     print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
+    #     print("-----------------------------------------------------------------------------------------------")
+    #     for res in results:
+    #         print(f"{res['epochs']:>6} | "
+    #               f"{res['learning_rate']:>5} | "
+    #               f"{res['train_prec']:.4f}{'':>4} | "
+    #               f"{res['test_prec']:.4f}{'':>4} | "
+    #               f"{res['train_auc']:.4f}{'':>4} | "
+    #               f"{res['test_auc']:.4f}{'':>4}")
 
-    for res in exp1_results:
-        print(f"{res['epochs']:>6} | "
-              f"{res['learning_rate']:>5} | "
-              f"{res['precision']:.4f}{'':>6} | "
-              f"{res['auc']:.4f}")
+    # Create and train the recommender
+    recommender = AppRecommender()
+    recommender.train(
+        interactions=train_interactions,
+        dataset=dataset,
+        user_features=user_features,
+        item_features=item_feature_configs['category_id_app_rating'],
+        sample_weight=train_weights,
+    )
 
+    # Get recommendations for a specific school
+    school_id = "5"  # Replace with actual ID
+    recommendations = recommender.recommend(
+        school_id=school_id,
+        interaction_df=interactions_df,
+        n=5
+    )
 
-    print("\n=== Running Experiment 2 ===")
-    exp1_results = run_experiment2(train_interactions, train_weights, test_interactions, user_features)
-    print("-------------------------------------------------------------")
-    print(f"{'Epochs':>6} | {'LR':>5} | {'Precision@5':>12} | {'AUC':>6}")
-    print("-------------------------------------------------------------")
+    # Display recommendations
+    print(f"Top 5 app recommendations for school {school_id}:")
+    for i, rec in enumerate(recommendations, 1):
+        print(f"{i}. App: {rec['app_id']} (Category: {rec['category_id']}, "
+              f"Rating: {rec['app_rating']:.1f}, Score: {rec['score']:.4f})")
 
-    for res in exp1_results:
-        print(f"{res['epochs']:>6} | "
-              f"{res['learning_rate']:>5} | "
-              f"{res['precision']:.4f}{'':>6} | "
-              f"{res['auc']:.4f}")
-
-    for config_key, item_features in item_feature_configs.items():
-        print(f"\n=== Running Experiment 3 ({config_key}) ===")
-        results = run_experiment3(train_interactions, train_weights, test_interactions, user_features, item_features)
-        print("-------------------------------------------------------------")
-        print(f"{'Epochs':>6} | {'LR':>5} | {'Precision@5':>12} | {'AUC':>6}")
-        print("-------------------------------------------------------------")
-        for res in results:
-            print(f"{res['epochs']:>6} | {res['learning_rate']:>5} | {res['precision']:.4f}{'':>6} | {res['auc']:.4f}")
+    # Save the model for later use
+    recommender.save("app_recommender_model.pkl")
 
 if __name__ == "__main__":
     run_all_experiments()
