@@ -5,9 +5,9 @@ from lightfm.cross_validation import random_train_test_split
 from lightfm.data import Dataset
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 
-from experiments.experiment1 import run_experiment1
-from experiments.experiment2 import run_experiment2
-from experiments.experiment3 import run_experiment3
+from experiments.experiment1 import run_experiment1, run_experiment1_interaction
+from experiments.experiment2 import run_experiment2, run_experiment2_interaction
+from experiments.experiment3 import run_experiment3, run_experiment3_interaction
 
 KAGGLE_DIR = "/kaggle/input/olpc-log/"
 LOCAL_DIR = "data"
@@ -50,11 +50,11 @@ def load_app_usage():
     Load aggregated-school-device-app-duration.csv and do device count normalization, etc.
     """
     print("\n2. Loading aggregated app usage for school-device-app...")
-    usage_path = os.path.join(_get_data_path(), "aggregated-school-device-app-category-duration.csv")
+    usage_path = os.path.join(_get_data_path(), "aggregated-school-device-app-category-rating-duration.csv")
     usage_df = pd.read_csv(usage_path)
-    usage_df.rename(columns={'school id': 'school_id', 'app id': 'app_id', 'total duration': 'duration', 'device id': 'device_id', 'category id': 'category_id'}, inplace=True)
+    usage_df.rename(columns={'school id': 'school_id', 'app id': 'app_id', 'total duration': 'duration', 'device id': 'device_id', 'category id': 'category_id', 'app rating':'app_rating'}, inplace=True)
 
-    return usage_df[['school_id', 'device_id', 'app_id', 'category_id', 'duration']]
+    return usage_df[['school_id', 'device_id', 'app_id', 'category_id', 'app_rating', 'duration']]
 
 def normalize_app_usage(usage_df):
     """
@@ -64,7 +64,7 @@ def normalize_app_usage(usage_df):
     devices_per_school = usage_df.groupby('school_id')['device_id'].nunique().reset_index().rename(columns={'device_id': 'device_count'})
     usage_df = usage_df.merge(devices_per_school, on='school_id', how='left')
 
-    usage_agg = usage_df.groupby(['school_id', 'app_id', 'category_id', 'device_count']).agg({'duration': 'sum'}).reset_index()
+    usage_agg = usage_df.groupby(['school_id', 'app_id', 'category_id', 'app_rating', 'device_count']).agg({'duration': 'sum'}).reset_index()
 
     print("3.1 Removing app duration that yield to 0 app usage duration.")
     # Only keep app usage when duration is not zero because this indicates no actual interaction.
@@ -84,7 +84,7 @@ def normalize_app_usage(usage_df):
     transformer = QuantileTransformer(output_distribution='normal', random_state=42)
     usage_agg['scaled_duration'] = transformer.fit_transform(usage_agg[['norm_duration_device_ratio']])
 
-    return usage_agg[['school_id', 'app_id', 'category_id', 'scaled_duration']]
+    return usage_agg[['school_id', 'app_id', 'category_id','app_rating', 'scaled_duration']]
 
 def merge_datasets(performance_df, usage_df):
     """
@@ -114,15 +114,24 @@ def build_dataset():
     count_null = merged_df['score_bin'].isna().sum()
     print(f"\n5. Delete number of NaN score_bin rows: {count_null}")
 
-    interaction_df = merged_df[['school_id', 'app_id', 'category_id', 'score_bin', 'scaled_duration']].copy()
+    interaction_df = merged_df[['school_id', 'app_id', 'category_id','app_rating', 'score_bin', 'scaled_duration']].copy()
 
     school_ids = interaction_df['school_id'].astype('category')
     app_ids = interaction_df['app_id'].astype('category')
-    category_ids = interaction_df['category_id'].astype('category')
+    interaction_df['category_id'] = interaction_df['category_id'].astype(int)
 
     all_bins = ['bin1','bin2','bin3','bin4','bin5']
     user_feature_labels = [f"score_bin:{b}" for b in all_bins]
-    item_feature_labels = [f"category_id:{c}" for c in category_ids]
+
+    unique_cats = interaction_df['category_id'].unique().tolist()  # now ints
+    unique_ratings = interaction_df['app_rating'].unique().tolist()
+
+    # Prepare labels for LightFM's dataset
+    cat_feature_labels = [f"category_id:{cat}" for cat in unique_cats]
+    rating_feature_labels = [f"app_rating:{rating}" for rating in unique_ratings]
+
+    # Combine them so the dataset knows all possible item features
+    item_feature_labels = cat_feature_labels + rating_feature_labels
 
     # Initialize and fit the Dataset with known user/item IDs and features
     dataset = Dataset()
@@ -134,10 +143,10 @@ def build_dataset():
     )
 
     # Build interaction matrices
-    # LightFM returns: interactions (binary), weights (real-valued)
+    # LightFM returns: interactions (binary)
     (interactions, weights) = dataset.build_interactions(
         (
-            (row.school_id, row.app_id, row.scaled_duration)
+            (row.school_id, row.app_id)
             for _, row in interaction_df.iterrows()
         )
     )
@@ -157,28 +166,46 @@ def build_dataset():
     )
 
     # Build item features matrix
-    # - Each app has exactly one category_id (assuming 1:1 relationship).
+    # - Each app has exactly one category_id and app_rating (assuming 1:1 relationship).
     item_features_df = (
-        interaction_df[['app_id', 'category_id']]
+        interaction_df[['app_id', 'category_id', 'app_rating']]
         .drop_duplicates(subset='app_id')
         .dropna(subset=['category_id'])
-    )
-    item_features = dataset.build_item_features(
-        (
-            (row.app_id, [f"category_id:{row.category_id}"])
-            for _, row in item_features_df.iterrows()
-        )
+        .dropna(subset=['app_rating'])
     )
 
-    return dataset, interactions, weights, user_features, item_features
+    item_feature_configs = {}
+    for config in [['category_id'], ['category_id', 'app_rating']]:
+        feature_cols = ['app_id'] + config
+        temp_df = item_features_df[feature_cols].copy()
+        if 'category_id' in config:
+            temp_df['category_id'] = temp_df['category_id'].astype(int)
+        if 'app_rating' in config:
+            temp_df['app_rating'] = temp_df['app_rating'].round(1)
+        feature_matrix = dataset.build_item_features(
+            (
+                (
+                    row.app_id,
+                    [
+                        f"{col}:{int(row[col])}" if col == 'category_id' else f"{col}:{row[col]}"
+                        for col in config
+                    ]
+                )
+                for _, row in temp_df.iterrows()
+            )
+        )
+        key = '_'.join(config)
+        item_feature_configs[key] = feature_matrix
+
+    return dataset, interactions, weights, user_features, item_feature_configs
 
 def run_all_experiments():
     # build_dataset, do random_train_test_split, etc.
-    dataset, interactions, weights, user_features, item_features = build_dataset()
-    train, test = random_train_test_split(weights, test_percentage=0.2, random_state=42)
+    dataset, interactions, weights, user_features, item_feature_configs = build_dataset()
+    train, test = random_train_test_split(interactions, test_percentage=0.2, random_state=np.random.RandomState(3))
 
     print("\n=== Running Experiment 1 ===")
-    exp1_results = run_experiment1(train, test)
+    exp1_results = run_experiment1_interaction(train, test)
     print("-------------------------------------------------------------")
     print(f"{'Epochs':>6} | {'LR':>5} | {'Precision@5':>12} | {'AUC':>6}")
     print("-------------------------------------------------------------")
@@ -191,7 +218,7 @@ def run_all_experiments():
 
 
     print("\n=== Running Experiment 2 ===")
-    exp1_results = run_experiment2(train, test, user_features)
+    exp1_results = run_experiment2_interaction(train, test, user_features)
     print("-------------------------------------------------------------")
     print(f"{'Epochs':>6} | {'LR':>5} | {'Precision@5':>12} | {'AUC':>6}")
     print("-------------------------------------------------------------")
@@ -202,17 +229,14 @@ def run_all_experiments():
               f"{res['precision']:.4f}{'':>6} | "
               f"{res['auc']:.4f}")
 
-    print("\n=== Running Experiment 3 ===")
-    exp1_results = run_experiment3(train, test, user_features, item_features)
-    print("-------------------------------------------------------------")
-    print(f"{'Epochs':>6} | {'LR':>5} | {'Precision@5':>12} | {'AUC':>6}")
-    print("-------------------------------------------------------------")
-
-    for res in exp1_results:
-        print(f"{res['epochs']:>6} | "
-              f"{res['learning_rate']:>5} | "
-              f"{res['precision']:.4f}{'':>6} | "
-              f"{res['auc']:.4f}")
+    for config_key, item_features in item_feature_configs.items():
+        print(f"\n=== Running Experiment 3 ({config_key}) ===")
+        results = run_experiment3_interaction(train, test, user_features, item_features)
+        print("-------------------------------------------------------------")
+        print(f"{'Epochs':>6} | {'LR':>5} | {'Precision@5':>12} | {'AUC':>6}")
+        print("-------------------------------------------------------------")
+        for res in results:
+            print(f"{res['epochs']:>6} | {res['learning_rate']:>5} | {res['precision']:.4f}{'':>6} | {res['auc']:.4f}")
 
 if __name__ == "__main__":
     run_all_experiments()
