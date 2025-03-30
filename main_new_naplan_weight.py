@@ -5,9 +5,10 @@ from lightfm.cross_validation import random_train_test_split
 from lightfm.data import Dataset
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 
-from experiments.experiment1 import run_experiment1, run_experiment1_interaction
-from experiments.experiment2 import run_experiment2, run_experiment2_interaction
-from experiments.experiment3 import run_experiment3, run_experiment3_interaction
+from AppRecommender import AppRecommender
+from experiments.experiment1 import run_experiment1
+from experiments.experiment2 import run_experiment2
+from experiments.experiment3 import run_experiment3
 
 KAGGLE_DIR = "/kaggle/input/olpc-log/"
 LOCAL_DIR = "data"
@@ -90,7 +91,7 @@ def merge_datasets(performance_df, usage_df):
     """
     Merge app usage data with school performance data, including avg_score.
     """
-    merged_df = usage_df.merge(performance_df[['school_id', 'score_bin']], on='school_id', how='left')
+    merged_df = usage_df.merge(performance_df[['school_id', 'avg_score', 'norm_avg_score', 'score_bin']], on='school_id', how='left')
 
     return merged_df
 
@@ -104,17 +105,23 @@ def build_dataset():
     """
     # 1) Load data
     perf_df = load_naplan_scores()
+
+    print(perf_df.describe())
+
     usage_df = load_app_usage()
     normalized_app_usage_df = normalize_app_usage(usage_df)
 
     print(f"\n4. Merge school performance data and app usage data.")
     # 2) Merge & preprocess
     merged_df = merge_datasets(perf_df, normalized_app_usage_df)
+    print(merged_df.head())
 
     count_null = merged_df['score_bin'].isna().sum()
     print(f"\n5. Delete number of NaN score_bin rows: {count_null}")
 
-    interaction_df = merged_df[['school_id', 'app_id', 'category_id','app_rating', 'score_bin', 'scaled_duration']].copy()
+    interaction_df = merged_df[['school_id', 'app_id', 'category_id','app_rating', 'avg_score', 'norm_avg_score', 'score_bin', 'scaled_duration']].copy()
+    interaction_df['scaled_avg_score'] = interaction_df['avg_score'] / 100
+    print(interaction_df.head())
 
     school_ids = interaction_df['school_id'].astype('category')
     app_ids = interaction_df['app_id'].astype('category')
@@ -138,32 +145,32 @@ def build_dataset():
     dataset.fit(
         users=school_ids,
         items=app_ids,
-        user_features=user_feature_labels,
-        item_features=item_feature_labels
+        item_features=item_feature_labels,
+        # user_features=user_feature_labels
     )
 
     # Build interaction matrices
-    # LightFM returns: interactions (binary)
+    # LightFM returns: interactions (binary), weights (avg_score/100)
     (interactions, weights) = dataset.build_interactions(
         (
-            (row.school_id, row.app_id)
+            (row.school_id, row.app_id, row.scaled_avg_score)
             for _, row in interaction_df.iterrows()
         )
     )
 
-    # Build user features matrix
-    # - Each school has exactly one score_bin
-    user_features_df = (
-        interaction_df[['school_id', 'score_bin']]
-        .drop_duplicates(subset='school_id')
-        .dropna(subset=['score_bin'])  # ensure no missing bins
-    )
-    user_features = dataset.build_user_features(
-        (
-            (row.school_id, [f"score_bin:{row.score_bin}"])
-            for _, row in user_features_df.iterrows()
-        )
-    )
+    # # Build user features matrix
+    # # - Each school has exactly one score_bin
+    # user_features_df = (
+    #     interaction_df[['school_id', 'score_bin']]
+    #     .drop_duplicates(subset='school_id')
+    #     .dropna(subset=['score_bin'])  # ensure no missing bins
+    # )
+    # user_features = dataset.build_user_features(
+    #     (
+    #         (row.school_id, [f"score_bin:{row.score_bin}"])
+    #         for _, row in user_features_df.iterrows()
+    #     )
+    # )
 
     # Build item features matrix
     # - Each app has exactly one category_id and app_rating (assuming 1:1 relationship).
@@ -197,15 +204,17 @@ def build_dataset():
         key = '_'.join(config)
         item_feature_configs[key] = feature_matrix
 
-    return dataset, interactions, weights, user_features, item_feature_configs
+    user_features = None
+    return dataset, interactions, weights, user_features, item_feature_configs, interaction_df
 
 def run_all_experiments():
     # build_dataset, do random_train_test_split, etc.
-    dataset, interactions, weights, user_features, item_feature_configs = build_dataset()
-    train, test = random_train_test_split(interactions, test_percentage=0.2, random_state=np.random.RandomState(3))
+    dataset, interactions, weights, user_features, item_feature_configs, interactions_df = build_dataset()
+    train_interactions, test_interactions = random_train_test_split(interactions, test_percentage=0.2, random_state=np.random.RandomState(3))
+    train_weights, test_weights = random_train_test_split(weights, test_percentage=0.2, random_state=np.random.RandomState(3))
 
     print("\n=== Running Experiment 1 ===")
-    exp1_results = run_experiment1_interaction(train, test, "interactions")
+    exp1_results = run_experiment1(train_interactions, train_weights, test_interactions, "naplan_weight")
     print("-----------------------------------------------------------------------------------------------")
     print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
     print("-----------------------------------------------------------------------------------------------")
@@ -218,9 +227,8 @@ def run_all_experiments():
               f"{res['train_auc']:.4f}{'':>4} | "
               f"{res['test_auc']:.4f}{'':>4}")
 
-
     print("\n=== Running Experiment 2 ===")
-    exp2_results = run_experiment2_interaction(train, test, user_features, "interactions")
+    exp2_results = run_experiment2(train_interactions, train_weights, test_interactions, user_features, "naplan_weight")
     print("-----------------------------------------------------------------------------------------------")
     print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
     print("-----------------------------------------------------------------------------------------------")
@@ -235,7 +243,7 @@ def run_all_experiments():
 
     for config_key, item_features in item_feature_configs.items():
         print(f"\n=== Running Experiment 3 ({config_key}) ===")
-        results = run_experiment3_interaction(train, test, user_features, item_features, "interactions")
+        results = run_experiment3(train_interactions, train_weights, test_interactions, user_features, item_features, "naplan_weight")
         print("-----------------------------------------------------------------------------------------------")
         print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
         print("-----------------------------------------------------------------------------------------------")
@@ -246,5 +254,33 @@ def run_all_experiments():
                   f"{res['test_prec']:.4f}{'':>4} | "
                   f"{res['train_auc']:.4f}{'':>4} | "
                   f"{res['test_auc']:.4f}{'':>4}")
+
+    # # Create and train the recommender
+    # recommender = AppRecommender()
+    # recommender.train(
+    #     interactions=train_interactions,
+    #     dataset=dataset,
+    #     user_features=user_features,
+    #     item_features=item_feature_configs['category_id_app_rating'],
+    #     sample_weight=train_weights,
+    # )
+    #
+    # # Get recommendations for a specific school
+    # school_id = "5"  # Replace with actual ID
+    # recommendations = recommender.recommend(
+    #     school_id=school_id,
+    #     interaction_df=interactions_df,
+    #     n=5
+    # )
+    #
+    # # Display recommendations
+    # print(f"Top 5 app recommendations for school {school_id}:")
+    # for i, rec in enumerate(recommendations, 1):
+    #     print(f"{i}. App: {rec['app_id']} (Category: {rec['category_id']}, "
+    #           f"Rating: {rec['app_rating']:.1f}, Score: {rec['score']:.4f})")
+    #
+    # # Save the model for later use
+    # recommender.save("app_recommender_model.pkl")
+
 if __name__ == "__main__":
     run_all_experiments()

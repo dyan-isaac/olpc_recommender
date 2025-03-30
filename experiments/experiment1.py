@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import mean_squared_error
 
 
-def run_experiment1_interaction(train, test, output_dir="graphs"):
+def run_experiment1_interaction(train, test, mode, output_dir="graphs"):
     """
     For Exp #1, we do NOT use user or item features.
     We test combos of (epochs, learning_rate).
@@ -23,14 +23,19 @@ def run_experiment1_interaction(train, test, output_dir="graphs"):
             model = LightFM(loss='warp', learning_rate=lr, random_state=42)
             model.fit(train, epochs=e, num_threads=4)
 
-            prec = precision_at_k(model, test, k=5).mean()
-            au = auc_score(model, test).mean()
+            train_prec = precision_at_k(model, train, k=5).mean()
+            train_au = auc_score(model, train).mean()
+
+            test_prec = precision_at_k(model, test, k=5).mean()
+            test_au = auc_score(model, test).mean()
 
             results.append({
                 'epochs': e,
                 'learning_rate': lr,
-                'precision': prec,
-                'auc': au
+                'test_prec': test_prec,
+                'test_auc': test_au,
+                'train_prec': train_prec,
+                'train_auc': train_au
             })
 
         # Plot & Save: Precision@5
@@ -50,7 +55,7 @@ def run_experiment1_interaction(train, test, output_dir="graphs"):
             # Sort by epochs so lines go in ascending order
             vals_sorted = sorted(vals, key=lambda x: x['epochs'])
             x = [v['epochs'] for v in vals_sorted]
-            y = [v['precision'] for v in vals_sorted]
+            y = [v['test_prec'] for v in vals_sorted]
             plt.plot(x, y, marker='o', label=f"LR={lr}")
 
         plt.title("Experiment #1 No user/item features: Precision@5 vs Epochs")
@@ -60,7 +65,7 @@ def run_experiment1_interaction(train, test, output_dir="graphs"):
         plt.tight_layout()
 
         # Save the figure
-        plt.savefig(os.path.join(output_dir, "experiment1_precision_interaction.png"))
+        plt.savefig(os.path.join(output_dir, f'experiment1_precision_{mode}.png'))
         plt.close()
 
         # Plot & Save: AUC
@@ -69,7 +74,7 @@ def run_experiment1_interaction(train, test, output_dir="graphs"):
         for lr, vals in lr_dict.items():
             vals_sorted = sorted(vals, key=lambda x: x['epochs'])
             x = [v['epochs'] for v in vals_sorted]
-            y = [v['auc'] for v in vals_sorted]
+            y = [v['test_auc'] for v in vals_sorted]
             plt.plot(x, y, marker='o', label=f"LR={lr}")
 
         plt.title("Experiment #1 No user/item features: AUC vs Epochs")
@@ -79,13 +84,13 @@ def run_experiment1_interaction(train, test, output_dir="graphs"):
         plt.tight_layout()
 
         # Save the figure
-        plt.savefig(os.path.join(output_dir, "experiment1_auc_interaction.png"))
+        plt.savefig(os.path.join(output_dir, f'experiment1_auc_{mode}.png'))
         plt.close()
 
     return results
 
 
-def run_experiment1(train_interactions, train_weights, test_interactions, output_dir="graphs"):
+def run_experiment1(train_interactions, train_weights, test_interactions, mode, output_dir="graphs"):
     """
     For Exp #1, we do NOT use user or item features.
     We test combos of (epochs, learning_rate).
@@ -98,7 +103,7 @@ def run_experiment1(train_interactions, train_weights, test_interactions, output
 
     for e in epoch_values:
         for lr in learning_rates:
-            model = LightFM(loss='warp',learning_rate=lr, learning_schedule='adagrad', random_state=42, user_alpha=0.01, item_alpha=0.01)
+            model = LightFM(loss='warp',learning_rate=lr, learning_schedule='adadelta', random_state=42, user_alpha=0.01, item_alpha=0.01)
             model.fit(train_interactions, sample_weight=train_weights, epochs=e, num_threads=4)
 
             train_prec = precision_at_k(model, train_interactions, k=5).mean()
@@ -143,7 +148,7 @@ def run_experiment1(train_interactions, train_weights, test_interactions, output
         plt.tight_layout()
 
         # Save the figure
-        plt.savefig(os.path.join(output_dir, "experiment1_precision_weight.png"))
+        plt.savefig(os.path.join(output_dir, f'experiment1_precision_{mode}.png'))
         plt.close()
 
         # Plot & Save: AUC
@@ -162,7 +167,7 @@ def run_experiment1(train_interactions, train_weights, test_interactions, output
         plt.tight_layout()
 
         # Save the figure
-        plt.savefig(os.path.join(output_dir, "experiment1_auc_weight.png"))
+        plt.savefig(os.path.join(output_dir, f'experiment1_auc_{mode}.png'))
         plt.close()
 
     return results

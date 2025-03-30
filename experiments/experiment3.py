@@ -4,7 +4,7 @@ from lightfm import LightFM
 from lightfm.evaluation import precision_at_k, auc_score
 from matplotlib import pyplot as plt
 
-def run_experiment3_interaction(train, test, user_features=None, item_features=None, output_dir="graphs"):
+def run_experiment3_interaction(train, test, user_features=None, item_features=None, mode=None, output_dir="graphs"):
     """
     For Exp #3, we pass both user and item features if available.
     Tuning epochs and learning_rate as well.
@@ -23,14 +23,21 @@ def run_experiment3_interaction(train, test, user_features=None, item_features=N
                       epochs=e,
                       num_threads=4)
 
-            prec = precision_at_k(model, test, user_features=user_features, item_features=item_features, k=5).mean()
-            au = auc_score(model, test, user_features=user_features, item_features=item_features).mean()
+            train_prec = precision_at_k(model, train, user_features=user_features,
+                                        item_features=item_features, k=5).mean()
+            train_au = auc_score(model, train, user_features=user_features,
+                                 item_features=item_features).mean()
+
+            test_prec = precision_at_k(model, test, user_features=user_features, item_features=item_features, k=5).mean()
+            test_au = auc_score(model, test, user_features=user_features, item_features=item_features).mean()
 
             results.append({
                 'epochs': e,
                 'learning_rate': lr,
-                'precision': prec,
-                'auc': au
+                'test_prec': test_prec,
+                'test_auc': test_au,
+                'train_prec': train_prec,
+                'train_auc': train_au
             })
 
     # Plot & Save: Precision@5
@@ -50,7 +57,7 @@ def run_experiment3_interaction(train, test, user_features=None, item_features=N
         # Sort by epochs so lines go in ascending order
         vals_sorted = sorted(vals, key=lambda x: x['epochs'])
         x = [v['epochs'] for v in vals_sorted]
-        y = [v['precision'] for v in vals_sorted]
+        y = [v['test_prec'] for v in vals_sorted]
         plt.plot(x, y, marker='o', label=f"LR={lr}")
 
     plt.title("Experiment #3 With user and item features: Precision@5 vs Epochs")
@@ -60,7 +67,7 @@ def run_experiment3_interaction(train, test, user_features=None, item_features=N
     plt.tight_layout()
 
     # Save the figure
-    plt.savefig(os.path.join(output_dir, "experiment3_precision_interaction.png"))
+    plt.savefig(os.path.join(output_dir, f'experiment3_precision_{mode}.png'))
     plt.close()
 
     # Plot & Save: AUC
@@ -69,7 +76,7 @@ def run_experiment3_interaction(train, test, user_features=None, item_features=N
     for lr, vals in lr_dict.items():
         vals_sorted = sorted(vals, key=lambda x: x['epochs'])
         x = [v['epochs'] for v in vals_sorted]
-        y = [v['auc'] for v in vals_sorted]
+        y = [v['test_auc'] for v in vals_sorted]
         plt.plot(x, y, marker='o', label=f"LR={lr}")
 
     plt.title("Experiment #3 With user and item features: AUC vs Epochs")
@@ -79,13 +86,13 @@ def run_experiment3_interaction(train, test, user_features=None, item_features=N
     plt.tight_layout()
 
     # Save the figure
-    plt.savefig(os.path.join(output_dir, "experiment3_auc_interaction.png"))
+    plt.savefig(os.path.join(output_dir, f'experiment3_auc_{mode}.png'))
     plt.close()
 
     return results
 
 
-def run_experiment3(train_interactions, train_weights, test_interactions, user_features=None, item_features=None, output_dir="graphs"):
+def run_experiment3(train_interactions, train_weights, test_interactions, user_features=None, item_features=None, mode=None, output_dir="graphs"):
     """
     For Exp #3, we pass both user and item features if available.
     Tuning epochs and learning_rate as well.
@@ -97,7 +104,7 @@ def run_experiment3(train_interactions, train_weights, test_interactions, user_f
 
     for e in epoch_values:
         for lr in learning_rates:
-            model = LightFM(loss='warp',learning_rate=lr, learning_schedule='adagrad', random_state=42, user_alpha=0.01, item_alpha=0.01)
+            model = LightFM(loss='warp',learning_rate=lr, learning_schedule='adadelta', random_state=42, user_alpha=0.01, item_alpha=0.01)
             model.fit(train_interactions,
                       sample_weight=train_weights,
                       user_features=user_features,
@@ -147,7 +154,7 @@ def run_experiment3(train_interactions, train_weights, test_interactions, user_f
     plt.tight_layout()
 
     # Save the figure
-    plt.savefig(os.path.join(output_dir, "experiment3_precision_weight.png"))
+    plt.savefig(os.path.join(output_dir, f'experiment3_precision_{mode}.png'))
     plt.close()
 
     # Plot & Save: AUC
@@ -166,7 +173,7 @@ def run_experiment3(train_interactions, train_weights, test_interactions, user_f
     plt.tight_layout()
 
     # Save the figure
-    plt.savefig(os.path.join(output_dir, "experiment3_auc_weight.png"))
+    plt.savefig(os.path.join(output_dir, f'experiment3_auc_{mode}.png'))
     plt.close()
 
     return results

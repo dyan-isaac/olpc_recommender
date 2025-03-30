@@ -206,74 +206,74 @@ def run_all_experiments():
     train_interactions, test_interactions = random_train_test_split(interactions, test_percentage=0.2, random_state=np.random.RandomState(3))
     train_weights, test_weights = random_train_test_split(weights, test_percentage=0.2, random_state=np.random.RandomState(3))
 
-    # print("\n=== Running Experiment 1 ===")
-    # exp1_results = run_experiment1(train_interactions, train_weights, test_interactions)
-    # print("-----------------------------------------------------------------------------------------------")
-    # print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
-    # print("-----------------------------------------------------------------------------------------------")
-    #
-    # for res in exp1_results:
-    #     print(f"{res['epochs']:>6} | "
-    #           f"{res['learning_rate']:>5} | "
-    #           f"{res['train_prec']:.4f}{'':>4} | "
-    #           f"{res['test_prec']:.4f}{'':>4} | "
-    #           f"{res['train_auc']:.4f}{'':>4} | "
-    #           f"{res['test_auc']:.4f}{'':>4}")
-    #
-    # print("\n=== Running Experiment 2 ===")
-    # exp2_results = run_experiment2(train_interactions, train_weights, test_interactions, user_features)
-    # print("-----------------------------------------------------------------------------------------------")
-    # print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
-    # print("-----------------------------------------------------------------------------------------------")
-    #
-    # for res in exp2_results:
-    #     print(f"{res['epochs']:>6} | "
-    #           f"{res['learning_rate']:>5} | "
-    #           f"{res['train_prec']:.4f}{'':>4} | "
-    #           f"{res['test_prec']:.4f}{'':>4} | "
-    #           f"{res['train_auc']:.4f}{'':>4} | "
-    #           f"{res['test_auc']:.4f}{'':>4}")
-    #
-    # for config_key, item_features in item_feature_configs.items():
-    #     print(f"\n=== Running Experiment 3 ({config_key}) ===")
-    #     results = run_experiment3(train_interactions, train_weights, test_interactions, user_features, item_features)
-    #     print("-----------------------------------------------------------------------------------------------")
-    #     print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
-    #     print("-----------------------------------------------------------------------------------------------")
-    #     for res in results:
-    #         print(f"{res['epochs']:>6} | "
-    #               f"{res['learning_rate']:>5} | "
-    #               f"{res['train_prec']:.4f}{'':>4} | "
-    #               f"{res['test_prec']:.4f}{'':>4} | "
-    #               f"{res['train_auc']:.4f}{'':>4} | "
-    #               f"{res['test_auc']:.4f}{'':>4}")
+    print("\n=== Running Experiment 1 ===")
+    exp1_results = run_experiment1(train_interactions, train_weights, test_interactions, "duration_weight")
+    print("-----------------------------------------------------------------------------------------------")
+    print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
+    print("-----------------------------------------------------------------------------------------------")
 
-    # Create and train the recommender
-    recommender = AppRecommender()
-    recommender.train(
-        interactions=train_interactions,
-        dataset=dataset,
-        user_features=user_features,
-        item_features=item_feature_configs['category_id_app_rating'],
-        sample_weight=train_weights,
-    )
+    for res in exp1_results:
+        print(f"{res['epochs']:>6} | "
+              f"{res['learning_rate']:>5} | "
+              f"{res['train_prec']:.4f}{'':>4} | "
+              f"{res['test_prec']:.4f}{'':>4} | "
+              f"{res['train_auc']:.4f}{'':>4} | "
+              f"{res['test_auc']:.4f}{'':>4}")
 
-    # Get recommendations for a specific school
-    school_id = "5"  # Replace with actual ID
-    recommendations = recommender.recommend(
-        school_id=school_id,
-        interaction_df=interactions_df,
-        n=5
-    )
+    print("\n=== Running Experiment 2 ===")
+    exp2_results = run_experiment2(train_interactions, train_weights, test_interactions, user_features, "duration_weight")
+    print("-----------------------------------------------------------------------------------------------")
+    print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
+    print("-----------------------------------------------------------------------------------------------")
 
-    # Display recommendations
-    print(f"Top 5 app recommendations for school {school_id}:")
-    for i, rec in enumerate(recommendations, 1):
-        print(f"{i}. App: {rec['app_id']} (Category: {rec['category_id']}, "
-              f"Rating: {rec['app_rating']:.1f}, Score: {rec['score']:.4f})")
+    for res in exp2_results:
+        print(f"{res['epochs']:>6} | "
+              f"{res['learning_rate']:>5} | "
+              f"{res['train_prec']:.4f}{'':>4} | "
+              f"{res['test_prec']:.4f}{'':>4} | "
+              f"{res['train_auc']:.4f}{'':>4} | "
+              f"{res['test_auc']:.4f}{'':>4}")
 
-    # Save the model for later use
-    recommender.save("app_recommender_model.pkl")
+    for config_key, item_features in item_feature_configs.items():
+        print(f"\n=== Running Experiment 3 ({config_key}) ===")
+        results = run_experiment3(train_interactions, train_weights, test_interactions, user_features, item_features, "duration_weight")
+        print("-----------------------------------------------------------------------------------------------")
+        print(f"{'Epochs':>6} | {'LR':>5} | {'Train P@5':>10} | {'Test P@5':>10} | {'Train AUC':>10} | {'Test AUC':>10}")
+        print("-----------------------------------------------------------------------------------------------")
+        for res in results:
+            print(f"{res['epochs']:>6} | "
+                  f"{res['learning_rate']:>5} | "
+                  f"{res['train_prec']:.4f}{'':>4} | "
+                  f"{res['test_prec']:.4f}{'':>4} | "
+                  f"{res['train_auc']:.4f}{'':>4} | "
+                  f"{res['test_auc']:.4f}{'':>4}")
+
+    # # Create and train the recommender
+    # recommender = AppRecommender()
+    # recommender.train(
+    #     interactions=train_interactions,
+    #     dataset=dataset,
+    #     user_features=user_features,
+    #     item_features=item_feature_configs['category_id_app_rating'],
+    #     sample_weight=train_weights,
+    # )
+    #
+    # # Get recommendations for a specific school
+    # school_id = "5"  # Replace with actual ID
+    # recommendations = recommender.recommend(
+    #     school_id=school_id,
+    #     interaction_df=interactions_df,
+    #     n=5
+    # )
+    #
+    # # Display recommendations
+    # print(f"Top 5 app recommendations for school {school_id}:")
+    # for i, rec in enumerate(recommendations, 1):
+    #     print(f"{i}. App: {rec['app_id']} (Category: {rec['category_id']}, "
+    #           f"Rating: {rec['app_rating']:.1f}, Score: {rec['score']:.4f})")
+    #
+    # # Save the model for later use
+    # recommender.save("app_recommender_model.pkl")
 
 if __name__ == "__main__":
     run_all_experiments()
