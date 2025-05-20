@@ -1,11 +1,6 @@
-# Copy the following data files to this directory:
-1. data\aggregated-school-device-app-category-duration.csv
-2. data\naplan.csv
-
 # How to run the experiments?
-1. Copy the source folders as mentioned in the above steps
-2. pip install -r requirements.txt
-3. python main.py
+1. pip install -r requirements.txt
+3. python olpc_lightfm.py
 
 # Preprocessing steps
 ## 1. Load NAPLAN Data
